@@ -25,3 +25,7 @@
 ## License
 
 [MIT](LICENSE)
+
+## 参与开发
+
+开始前请阅读 [AGENTS.md](AGENTS.md)（流程与规则）和 [docs/README.md](docs/README.md)（文档索引）。
