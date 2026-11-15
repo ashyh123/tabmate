@@ -8,7 +8,8 @@ const exists = (link) => existing.has(link);
 test('docs 索引：每篇文档都有链接且链接都有效时通过', () => {
   const violations = checkDocsIndex({
     docFiles: ['README.md', 'product.md', 'architecture.md'],
-    readme: '- [product.md](product.md)：产品\n- [architecture.md](architecture.md#决定)：架构\n- [外链](https://example.com)\n',
+    readme:
+      '- [product.md](product.md)：产品\n- [architecture.md](architecture.md#决定)：架构\n- [外链](https://example.com)\n',
     exists,
   });
   assert.deepEqual(violations, []);

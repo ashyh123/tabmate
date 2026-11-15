@@ -2,7 +2,7 @@
 
 一个为个人使用而设计、易于扩展的浏览器插件。
 
-> 项目处于早期设计阶段，尚无可用版本。
+> 项目处于早期阶段：目前只有扩展骨架（设置页、弹出面板、「测试连接」），还没有翻译功能。
 
 ## 计划功能
 
@@ -27,6 +27,28 @@
 - 格式与检查：Biome；包管理：pnpm；CI：GitHub Actions
 
 选型理由、被否决的选项和权限设计见 [docs/architecture.md](docs/architecture.md)。
+
+## 本地开发
+
+需要 Node.js 22.12 或更高版本和 pnpm（版本见 `package.json` 的 `packageManager`）。
+
+```sh
+pnpm install
+pnpm dev          # 开发模式：启动一个加载了扩展的 Chrome，修改后自动重载
+pnpm build        # 构建到 .output/chrome-mv3/
+pnpm check        # 类型检查、Biome、单元测试、构建
+pnpm exec playwright install chromium   # 首次运行端到端测试前
+pnpm test:e2e     # 端到端测试
+```
+
+开发模式下 WXT 会为热重载临时加上 `tabs` 权限；`pnpm build` 的产物只有 `storage`、`scripting` 和 `<all_urls>`。
+
+在 Chrome 中加载构建产物：
+
+1. 执行 `pnpm build`。
+2. 打开 `chrome://extensions`，打开右上角的「开发者模式」。
+3. 点击「加载已解压的扩展程序」，选择仓库中的 `.output/chrome-mv3` 目录。
+4. 点击工具栏中的扩展图标，再点「打开设置」，填写 API 地址、API key 和模型名并保存，然后点「测试连接」。
 
 ## License
 

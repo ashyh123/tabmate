@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, normalize, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { checkRepoDeps } from './check-deps.mjs';
 
 const TM_ID = /\bTM-\d{3}\b/;
 // notion.so / notion.site 是约定的链接形式；Notion 工具返回的 app.notion.com 链接也接受。
@@ -67,6 +68,10 @@ function main() {
     }),
   );
   console.log('docs 索引检查：已运行');
+
+  const deps = checkRepoDeps(root);
+  violations.push(...deps.violations);
+  console.log(`依赖规则检查：已运行（${deps.checked} 个源文件）`);
 
   const prBody = process.env.PR_BODY;
   if (prBody === undefined) {
