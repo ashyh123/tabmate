@@ -49,135 +49,163 @@ const REGEX_PRECEDERS = new Set([
 const REGEX_KEYWORDS =
   /(?:^|[^\w$])(?:return|typeof|instanceof|in|of|new|delete|void|throw|case|do|else|yield|await)$/;
 
+/** 找从 start 开始、在同一行内结束的字符串字面量。找不到配对引号时返回 null。 */
+function readStringLiteral(source, start) {
+  const quote = source[start];
+  let value = '';
+  for (let j = start + 1; j < source.length; j += 1) {
+    const c = source[j];
+    if (c === '\\') {
+      value += source[j + 1] ?? '';
+      j += 1;
+    } else if (c === '\n') {
+      return null;
+    } else if (c === quote) {
+      return { value, end: j + 1 };
+    } else {
+      value += c;
+    }
+  }
+  return null;
+}
+
+/** 找从 start（开头的 /）开始、在同一行内结束的正则字面量，返回结束位置；找不到时返回 -1。 */
+function regexLiteralEnd(source, start) {
+  let inClass = false;
+  for (let j = start + 1; j < source.length && source[j] !== '\n'; j += 1) {
+    const c = source[j];
+    if (c === '\\') j += 1;
+    else if (c === '[') inClass = true;
+    else if (c === ']') inClass = false;
+    else if (c === '/' && !inClass) return j + 1;
+  }
+  return -1;
+}
+
+const blank = (text) => text.replaceAll(/[^\n]/g, ' ');
+
+class Scanner {
+  constructor(source) {
+    this.source = source;
+    this.i = 0;
+    this.out = '';
+    this.strings = [];
+    this.lastSignificant = '';
+    this.braceDepth = 0;
+    this.templateDepth = []; // 每一层 ${ 进入代码时的大括号深度
+  }
+
+  run() {
+    while (this.i < this.source.length) {
+      if (!(this.comment() || this.regex() || this.string() || this.template() || this.brace())) {
+        this.plain();
+      }
+    }
+    return { code: this.out, strings: this.strings };
+  }
+
+  emit(text, length, lastSignificant) {
+    this.out += text;
+    this.i += length;
+    if (lastSignificant !== undefined) this.lastSignificant = lastSignificant;
+  }
+
+  comment() {
+    const { source, i } = this;
+    if (source[i] !== '/') return false;
+    let stop;
+    if (source[i + 1] === '/') {
+      const newline = source.indexOf('\n', i);
+      stop = newline === -1 ? source.length : newline;
+    } else if (source[i + 1] === '*') {
+      const close = source.indexOf('*/', i + 2);
+      stop = close === -1 ? source.length : close + 2;
+    } else {
+      return false;
+    }
+    this.emit(blank(source.slice(i, stop)), stop - i);
+    return true;
+  }
+
+  regex() {
+    if (this.source[this.i] !== '/') return false;
+    const afterOperator = REGEX_PRECEDERS.has(this.lastSignificant);
+    if (!afterOperator && !REGEX_KEYWORDS.test(this.out.slice(-40).trimEnd())) return false;
+    const end = regexLiteralEnd(this.source, this.i);
+    if (end === -1) return false;
+    this.emit(' '.repeat(end - this.i), end - this.i, 'regex');
+    return true;
+  }
+
+  string() {
+    const quote = this.source[this.i];
+    if (quote !== "'" && quote !== '"') return false;
+    const literal = readStringLiteral(this.source, this.i);
+    if (!literal) return false;
+    this.emit(`${quote}#${this.strings.length}${quote}`, literal.end - this.i, 'string');
+    this.strings.push(literal.value);
+    return true;
+  }
+
+  template() {
+    if (this.source[this.i] !== '`') return false;
+    this.emit('`', 1);
+    this.templateText();
+    return true;
+  }
+
+  brace() {
+    const c = this.source[this.i];
+    if (c === '{') {
+      this.braceDepth += 1;
+      return false;
+    }
+    if (c !== '}') return false;
+    if (this.templateDepth.at(-1) === this.braceDepth) {
+      // ${ ... } 结束，回到模板字符串的文字部分。
+      this.templateDepth.pop();
+      this.braceDepth -= 1;
+      this.emit('}', 1);
+      this.templateText();
+      return true;
+    }
+    this.braceDepth -= 1;
+    return false;
+  }
+
+  plain() {
+    const c = this.source[this.i];
+    const significant = /\s/.test(c) ? undefined : /[\w$]/.test(c) ? 'word' : c;
+    this.emit(c, 1, significant);
+  }
+
+  /** 扫描模板字符串的文字部分，直到结束的 ` 或进入 ${。 */
+  templateText() {
+    const { source } = this;
+    while (this.i < source.length) {
+      const c = source[this.i];
+      if (c === '`') {
+        this.emit('`', 1, '`');
+        return;
+      }
+      if (c === '$' && source[this.i + 1] === '{') {
+        this.braceDepth += 1;
+        this.templateDepth.push(this.braceDepth);
+        this.emit('${', 2, '{');
+        return;
+      }
+      const length = c === '\\' ? 2 : 1;
+      this.emit(blank(source.slice(this.i, this.i + length)), length);
+    }
+  }
+}
+
 /**
  * 把源码中的注释换成空格，把每个 '...' / "..." 字符串换成 '#<序号>'，模板字符串的文字部分换成空格。
  * 返回处理后的代码和字符串表。一行内找不到配对引号的 ' 或 "（如 JSX 文本里的撇号）按普通字符处理。
  */
 export function scan(source) {
-  const strings = [];
-  let out = '';
-  let i = 0;
-  let lastSignificant = '';
-  const templateDepth = []; // 每一层 ${ 进入代码时的大括号深度
-  let braceDepth = 0;
-
-  const readString = (quote) => {
-    let j = i + 1;
-    let value = '';
-    while (j < source.length) {
-      const c = source[j];
-      if (c === '\\') {
-        value += source[j + 1] ?? '';
-        j += 2;
-        continue;
-      }
-      if (c === '\n') return null;
-      if (c === quote) return { value, end: j + 1 };
-      value += c;
-      j += 1;
-    }
-    return null;
-  };
-
-  // 从模板字符串的文字部分开始扫描，直到结束的 ` 或进入 ${。
-  const skipTemplateText = () => {
-    while (i < source.length) {
-      const c = source[i];
-      if (c === '\\') {
-        out += '  ';
-        i += 2;
-      } else if (c === '`') {
-        out += '`';
-        i += 1;
-        lastSignificant = '`';
-        return;
-      } else if (c === '$' && source[i + 1] === '{') {
-        out += '${';
-        i += 2;
-        braceDepth += 1;
-        templateDepth.push(braceDepth);
-        lastSignificant = '{';
-        return;
-      } else {
-        out += c === '\n' ? '\n' : ' ';
-        i += 1;
-      }
-    }
-  };
-
-  while (i < source.length) {
-    const c = source[i];
-    const next = source[i + 1];
-
-    if (c === '/' && next === '/') {
-      while (i < source.length && source[i] !== '\n') {
-        out += ' ';
-        i += 1;
-      }
-      continue;
-    }
-    if (c === '/' && next === '*') {
-      const end = source.indexOf('*/', i + 2);
-      const stop = end === -1 ? source.length : end + 2;
-      out += source.slice(i, stop).replace(/[^\n]/g, ' ');
-      i = stop;
-      continue;
-    }
-    if (
-      c === '/' &&
-      (REGEX_PRECEDERS.has(lastSignificant) || REGEX_KEYWORDS.test(out.slice(-40).trimEnd()))
-    ) {
-      // 正则字面量：跳到未转义、不在字符类中的 /。
-      let j = i + 1;
-      let inClass = false;
-      while (j < source.length && source[j] !== '\n') {
-        const d = source[j];
-        if (d === '\\') j += 1;
-        else if (d === '[') inClass = true;
-        else if (d === ']') inClass = false;
-        else if (d === '/' && !inClass) break;
-        j += 1;
-      }
-      if (source[j] === '/') {
-        out += ' '.repeat(j + 1 - i);
-        i = j + 1;
-        lastSignificant = 'regex';
-        continue;
-      }
-    }
-    if (c === "'" || c === '"') {
-      const str = readString(c);
-      if (str) {
-        out += `${c}#${strings.length}${c}`;
-        strings.push(str.value);
-        i = str.end;
-        lastSignificant = 'string';
-        continue;
-      }
-    }
-    if (c === '`') {
-      out += '`';
-      i += 1;
-      skipTemplateText();
-      continue;
-    }
-    if (c === '{') braceDepth += 1;
-    if (c === '}') {
-      if (templateDepth.length > 0 && templateDepth[templateDepth.length - 1] === braceDepth) {
-        templateDepth.pop();
-        braceDepth -= 1;
-        out += '}';
-        i += 1;
-        skipTemplateText();
-        continue;
-      }
-      braceDepth -= 1;
-    }
-    out += c;
-    if (!/\s/.test(c)) lastSignificant = /[\w$]/.test(c) ? 'word' : c;
-    i += 1;
-  }
-  return { code: out, strings };
+  return new Scanner(source).run();
 }
 
 /** 返回源码中所有静态的模块说明符，以及无法静态检查的动态引用。 */
@@ -289,7 +317,7 @@ export function checkRepoDeps(root) {
   if (!existsSync(srcDir)) return { checked: 0, violations: [] };
   const files = new Map(
     listSourceFiles(srcDir).map((path) => [
-      relative(root, path).split('\\').join('/'),
+      relative(root, path).replaceAll('\\', '/'),
       readFileSync(path, 'utf8'),
     ]),
   );

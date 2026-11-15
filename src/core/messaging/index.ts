@@ -60,7 +60,7 @@ export function toMessageError(error: unknown): MessageError {
     const kind = (error as { kind?: unknown }).kind;
     return { kind: typeof kind === 'string' ? kind : 'internal', message: error.message };
   }
-  return { kind: 'internal', message: String(error) };
+  return { kind: 'internal', message: typeof error === 'string' ? error : '未知错误' };
 }
 
 export async function sendMessage<N extends MessageName>(

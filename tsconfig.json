@@ -2,7 +2,6 @@
   "extends": "./.wxt/tsconfig.json",
   "compilerOptions": {
     "strict": true,
-    "exactOptionalPropertyTypes": true,
     "jsx": "react-jsx"
   }
 }

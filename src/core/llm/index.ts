@@ -46,7 +46,9 @@ export interface OpenAiCompatibleOptions {
 /** OpenAI 兼容的 Chat Completions。错误统一抛出 LlmError；调用方主动取消时原样抛出取消原因。 */
 export function createOpenAiCompatibleProvider(options: OpenAiCompatibleOptions): Provider {
   const doFetch = options.fetch ?? globalThis.fetch.bind(globalThis);
-  const url = `${options.baseUrl.replace(/\/+$/, '')}/chat/completions`;
+  let baseUrl = options.baseUrl;
+  while (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
+  const url = `${baseUrl}/chat/completions`;
 
   return {
     async complete(messages: readonly ChatMessage[], signal: AbortSignal): Promise<string> {

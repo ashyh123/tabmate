@@ -165,7 +165,7 @@ export function App() {
   );
 }
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+function Section({ title, children }: Readonly<{ title: string; children: ReactNode }>) {
   return (
     <section className="space-y-4 rounded-lg border border-gray-200 p-5">
       <h2 className="font-medium text-base">{title}</h2>
@@ -176,19 +176,17 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 
 const noticeColor = { ok: 'text-green-700', error: 'text-red-700', info: 'text-gray-500' };
 
-function NoticeText({ notice }: { notice: Notice }) {
+function NoticeText({ notice }: Readonly<{ notice: Notice }>) {
   return (
-    <p role="status" className={notice ? noticeColor[notice.tone] : undefined}>
-      {notice?.text}
-    </p>
+    <output className={`block ${notice ? noticeColor[notice.tone] : ''}`}>{notice?.text}</output>
   );
 }
 
 interface FieldProps {
   label: string;
   value: string;
-  error?: string | undefined;
-  hint?: string | undefined;
+  error?: string;
+  hint?: string;
   onChange(value: string): void;
 }
 
@@ -197,7 +195,7 @@ function FieldShell({
   error,
   hint,
   children,
-}: Omit<FieldProps, 'value' | 'onChange'> & { children(id: string): ReactNode }) {
+}: Readonly<Omit<FieldProps, 'value' | 'onChange'> & { children(id: string): ReactNode }>) {
   const id = useId();
   return (
     <div className="space-y-1">
@@ -217,7 +215,7 @@ function TextField({
   type = 'text',
   placeholder,
   ...props
-}: FieldProps & { type?: 'text' | 'password'; placeholder?: string }) {
+}: Readonly<FieldProps & { type?: 'text' | 'password'; placeholder?: string }>) {
   return (
     <FieldShell {...props}>
       {(id) => (
@@ -238,7 +236,7 @@ function TextField({
 function FeatureField({
   schema,
   ...props
-}: Omit<FieldProps, 'label'> & { schema: FeatureSettingField }) {
+}: Readonly<Omit<FieldProps, 'label'> & { schema: FeatureSettingField }>) {
   const meta = schema.meta() ?? {};
   const label = meta.title ?? '';
   const inner = schema.unwrap();
