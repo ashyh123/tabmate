@@ -40,6 +40,7 @@
   - 审查中没有阻塞项，或阻塞项已修复并经 bot 复审；
   - CI 全部通过；
   - 代理自己读过完整 diff，没有发现问题。
+- bot 的三种结论：「建议合并」可以合并；「有条件合并」在条件满足之前视为不可合并；「不建议合并」不合并，交给维护者。
 - 任一条件不满足，或代理不认同 bot 的理由，就停下并交给维护者，不合并。
 - bot 的非阻塞建议：采纳，或在 PR 中回复说明不采纳的理由。
 - 默认用 squash 合并，合并后删除分支。叠在另一个 PR 上的 PR：先用 merge commit 合并下层 PR，再把上层 PR 的 base 改为 `main`，等 CI 通过后合并。
@@ -66,8 +67,10 @@
 ## 检查命令
 
 ```sh
-node scripts/ci/check-hygiene.mjs
-node --test "scripts/ci/*.test.mjs"
+pnpm install --frozen-lockfile
+pnpm check                          # 类型检查、Biome、单元测试（含 scripts/ci 的测试）、构建
+pnpm test:e2e                       # 构建后用 Playwright 加载扩展跑端到端测试
+node scripts/ci/check-hygiene.mjs   # docs 索引、依赖规则、实施文档引用
 ```
 
-代码脚手架落地后会补充更多检查。
+首次运行端到端测试前执行 `pnpm exec playwright install chromium`。

@@ -30,3 +30,34 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: node scripts/ci/check-hygiene.mjs
+
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@9bbca1e9dc2902adb87e8780fe5c98796985a62d # v6.1.1
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: pnpm
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+      - name: 类型检查
+        run: pnpm typecheck
+      - name: Biome
+        run: pnpm lint
+      - name: 单元测试
+        run: pnpm test
+      - name: 构建
+        run: pnpm build
+      - name: 安装 Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: 端到端测试
+        run: pnpm test:e2e
+      - name: 上传 Playwright 报告
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-test-results
+          path: test-results/
+          retention-days: 7

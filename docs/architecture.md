@@ -1,6 +1,6 @@
 # 架构
 
-本文记录的决定来自实施文档 TM-001「技术选型与架构」：https://www.notion.so/4197b21c65888199b3ceed5cdc3fe071
+本文记录的决定来自实施文档 TM-001「技术选型与架构」：https://www.notion.so/4197b21c65888199b3ceed5cdc3fe071 。来自其他实施文档的小节，在小节开头注明来源。
 
 各库的具体版本不在这里固定，由 TM-002 搭骨架时查当时的最新稳定版确定。
 
@@ -72,7 +72,7 @@ tests/
 - `core/` 不得引用任何 `features/`。
 - 读取密钥和调用模型的模块，只能被后台入口引用。
 
-这三条用检查脚本强制，不靠文字约定。检查在 TM-002 中实现。
+这三条用检查脚本强制，不靠文字约定：`scripts/ci/check-deps.mjs`（TM-002 实现，作为 hygiene 检查的一部分运行）。其中第三条的具体形式见下文「设置与密钥」一节。
 
 理由：TM-001 未单独说明。前两条对应目标行为「新增功能不需要改动其他功能的代码」，第三条对应「API key 只在后台脚本中读取，页面内的脚本拿不到」。
 
@@ -119,3 +119,33 @@ tests/
 理由：对应 TM-001 目标行为：API key 只在后台脚本中读取，页面内的脚本拿不到。
 
 被否决的选项：`chrome.storage.sync`，因为它会随账号把密钥同步到其他设备。
+
+## 决定（维护者，2026-11-15）：设置与密钥分开、模型调用的错误类别
+
+来源：实施文档 TM-002「项目骨架」：https://www.notion.so/4197b21c658881698529cee283c8bbd9
+
+- 非敏感设置和 API key 分成两个模块：
+  - `src/core/settings`：模型接口地址（默认 `https://api.openai.com/v1`）、模型名（没有默认值，保存时必填）、按功能 id 分组的各功能设置。存在 `chrome.storage.local` 的 `settings` 键下。任何环境都可以引用。读取时用 Zod 校验并补默认值，存储内容损坏时回退到默认值，不抛错。
+  - `src/core/secrets`：API key 的读写，存在单独的 `secrets.apiKey` 键下。只允许后台入口引用。
+- 设置页不能读回 key：设置页通过消息把 key 交给后台写入，之后只能通过消息拿到「是否已设置」和掩码（如 `sk-…abcd`）。没有任何消息返回完整的 key。
+- `src/core/llm` 也只允许后台入口引用。功能模块通过后台上下文（`BackgroundContext.getProvider`）拿到模型调用。
+- 模型调用的错误只有五类，每类有固定的中文提示：密钥无效（`auth`）、被限流（`rateLimit`）、网络错误（`network`）、地址或模型错误（`endpoint`）、响应格式不符（`badResponse`）。消息处理函数抛出的错误连同类别一起返回给发送方。
+
+理由：对应 TM-001 目标行为「API key 只在后台脚本中读取，页面内的脚本拿不到」。设置与 key 放在同一个模块里，读设置的页面就会顺带读到 key。
+
+被否决的选项：TM-002 未列出。
+
+### 已知限制：扩展页面在技术上仍能直接读到 key
+
+扩展页面（设置页、弹出面板）和后台 service worker 同属 `chrome-extension://<扩展 id>` 这一个源，共享同一份 `chrome.storage.local`。Chrome 没有提供「某个存储键只对 service worker 开放」的机制：
+
+- `chrome.storage.session` 只在浏览器会话期间保留，不能存需要长期保存的 key。
+- `storage.local.setAccessLevel()` 只区分「扩展自身的上下文」和 content script，扩展页面属于前者，无法被排除。
+- 在存储中加密也不解决问题：解密所需的密钥同样只能放在这个源里，扩展页面一样能拿到。
+
+所以，在设置页或弹出面板里直接调用 `chrome.storage.local.get('secrets.apiKey')`，能读到完整的 key。「页面拿不到 key」保证的是：应用代码中没有任何一条让页面拿到 key 的路径。具体由以下检查守住：
+
+- 依赖规则检查：除后台入口外，任何文件引用 `core/secrets` 或 `core/llm` 都会失败。
+- 端到端测试：设置页的 DOM（包括输入框的值）中没有完整的 key；设置页读取设置时读到的存储内容中没有 key；协议中的每一条消息，响应里都没有完整的 key。协议新增消息而测试没有覆盖时，类型检查失败。
+
+content script（TM-003 引入）默认也能访问 `chrome.storage.local`。TM-003 需要决定是否调用 `chrome.storage.local.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' })`，让 content script 读不到存储，改为通过消息取设置。
