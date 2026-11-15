@@ -12,15 +12,20 @@
 
 ## 设计理念
 
-- 薄内核 + 功能模块：每个功能是一个独立模块，向内核注册自己的设置、划词按钮、右键菜单和后台逻辑。
+- 薄内核 + 功能模块：每个功能是 `src/features/` 下的一个独立目录，在一处向内核注册自己的设置、后台逻辑和页面内逻辑。划词按钮、右键菜单等接入点等到第一个需要它们的功能出现时再加。
 - API key 只保存在本地，仅后台脚本读取。
 
 ## 技术栈
 
-- [WXT](https://wxt.dev)
-- TypeScript
-- React
-- Manifest V3
+- [WXT](https://wxt.dev)，Manifest V3，仅 Chrome
+- TypeScript（严格模式）
+- 扩展页面：React + Tailwind；页面内译文：原生 DOM
+- 设置校验：Zod
+- 模型调用：直接 `fetch` 调 OpenAI 兼容的 Chat Completions 接口
+- 测试：Vitest（单元）、Playwright（端到端）
+- 格式与检查：Biome；包管理：pnpm；CI：GitHub Actions
+
+选型理由、被否决的选项和权限设计见 [docs/architecture.md](docs/architecture.md)。
 
 ## License
 
