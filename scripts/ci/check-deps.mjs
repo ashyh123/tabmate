@@ -175,8 +175,8 @@ class Scanner {
 
   plain() {
     const c = this.source[this.i];
-    const significant = /\s/.test(c) ? undefined : /[\w$]/.test(c) ? 'word' : c;
-    this.emit(c, 1, significant);
+    if (/\s/.test(c)) this.emit(c, 1);
+    else this.emit(c, 1, /[\w$]/.test(c) ? 'word' : c);
   }
 
   /** 扫描模板字符串的文字部分，直到结束的 ` 或进入 ${。 */
