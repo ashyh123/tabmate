@@ -1,0 +1,11 @@
+node_modules/
+.output/
+.wxt/
+dist/
+web-ext-artifacts/
+*.log
+.env
+.env.*
+.DS_Store
+.idea/
+.vscode/
