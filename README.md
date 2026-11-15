@@ -22,6 +22,7 @@
 - 扩展页面：React + Tailwind；页面内译文：原生 DOM
 - 设置校验：Zod
 - 模型调用：直接 `fetch` 调 OpenAI 兼容的 Chat Completions 接口
+- 语言识别：`chrome.i18n.detectLanguage`
 - 测试：Vitest（单元）、Playwright（端到端）
 - 格式与检查：Biome；包管理：pnpm；CI：GitHub Actions
 
